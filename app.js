@@ -32,6 +32,35 @@ app.use(helmet());
 
 console.log("Server started on port " + port);
 
+let conn;
+
+r.connect(config.database).then(c => {
+  conn = c;
+  return r.dbCreate(config.database.db).run(conn);
+})
+.then(() => {
+  return q.all([
+    r.tableCreate("users", {primaryKey: 'id_str'}).run(conn),
+    r.tableCreate("tweets", {primaryKey: 'id_str'}).run(conn),
+  ]);
+})
+.then(() => {
+  return q.all([
+    r.table("tweets").indexCreate("user_id", r.row("user")("id_str")).run(conn),
+    r.table("tweets").indexCreate("created_at").run(conn),
+    r.table("users").indexCreate("tags", r.row("list_tags")("text"), { multi: true }).run(conn)
+  ]);
+})
+.error(err => {
+  if (err.msg.indexOf("already exists") == -1)
+    console.log(err.msg);
+  if (err.msg.startsWith('Could not connect'))
+    throw err.msg
+})
+.finally(() => {
+  if (conn)
+    conn.close();
+})
 
 io.on("connection", socket => {
   console.log('Socket ' +socket.id + ' connected');
